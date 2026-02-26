@@ -1,9 +1,8 @@
 ---
 name: transcribeyt
 description: Fetch a YouTube video transcript and place it into the conversation context. Triggers on "YouTube transcript", "video transcript", "fetch transcript".
-user_invocable: true
-tools:
-  - Bash
+user-invocable: true
+allowed-tools: Bash
 ---
 
 # YouTube Transcript to Context

@@ -181,10 +181,10 @@ class TestSaveAndRetrieve:
 # ---------------------------------------------------------------------------
 
 class TestGetTranscriptDoc:
-    """Tests for get_transcript_doc() — readable markdown from stored segments."""
+    """Tests for get_transcript_doc() — collapsible markdown from stored segments."""
 
     def test_save_and_get_doc(self, tmp_path) -> None:
-        """get_transcript_doc() returns markdown with timestamped paragraphs."""
+        """get_transcript_doc() returns markdown with collapsible timestamped sections."""
         db_path = str(tmp_path / "test.duckdb")
         with TranscriptStore(db_path) as store:
             # Segments span 0.0–7.5 seconds — all within one 30-second window.
@@ -193,19 +193,20 @@ class TestGetTranscriptDoc:
 
             doc = store.get_transcript_doc("dQw4w9WgXcQ")
 
-            # All three segments fit in one paragraph since they're within 30s.
-            assert doc.startswith("**[00:00]**")
+            # All three segments fit in one section since they're within 30s.
+            assert doc.startswith("<details>")
+            assert "<summary>00:00</summary>" in doc
             assert "Never gonna give you up" in doc
             assert "Never gonna let you down" in doc
             assert "Never gonna run around and desert you" in doc
-            # Single paragraph — no double-newline separators.
-            assert "\n\n" not in doc
+            # Single section — only one <details> block.
+            assert doc.count("<details>") == 1
 
-    def test_doc_with_paragraph_breaks(self, tmp_path) -> None:
-        """Segments spanning >30 seconds produce multiple paragraphs."""
+    def test_doc_with_section_breaks(self, tmp_path) -> None:
+        """Segments spanning >30 seconds produce multiple collapsible sections."""
         db_path = str(tmp_path / "test.duckdb")
         with TranscriptStore(db_path) as store:
-            # Two segments 40 seconds apart — should produce two paragraphs.
+            # Two segments 40 seconds apart — should produce two sections.
             wide_segments = [
                 {"text": "First part", "start": 0.0, "duration": 5.0},
                 {"text": "Second part", "start": 40.0, "duration": 5.0},
@@ -214,10 +215,11 @@ class TestGetTranscriptDoc:
             store.save_transcript("dQw4w9WgXcQ", transcript, _sample_metadata())
 
             doc = store.get_transcript_doc("dQw4w9WgXcQ")
-            paragraphs = doc.split("\n\n")
-            assert len(paragraphs) == 2
-            assert paragraphs[0] == "**[00:00]** First part"
-            assert paragraphs[1] == "**[00:40]** Second part"
+            assert doc.count("<details>") == 2
+            assert "<summary>00:00</summary>" in doc
+            assert "<summary>00:40</summary>" in doc
+            assert "First part" in doc
+            assert "Second part" in doc
 
     def test_doc_missing_video(self, tmp_path) -> None:
         """get_transcript_doc() returns empty string for non-existent video."""

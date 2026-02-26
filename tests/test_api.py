@@ -83,13 +83,14 @@ class TestTranscriptEndpoint:
     @patch("yt_transcript_extractor.api.extract")
     def test_doc_format(self, mock_extract: MagicMock, client: TestClient) -> None:
         """format=doc returns markdown plain text with 200."""
-        mock_extract.return_value = "**[00:00]** Hello world Second line"
+        doc_output = "<details>\n<summary>00:00</summary>\n\nHello world Second line\n\n</details>"
+        mock_extract.return_value = doc_output
 
         resp = client.get("/transcript/dQw4w9WgXcQ?format=doc")
 
         assert resp.status_code == 200
         # Doc format returns a string, so it gets a PlainTextResponse.
-        assert resp.text == "**[00:00]** Hello world Second line"
+        assert resp.text == doc_output
         mock_extract.assert_called_once_with(
             "dQw4w9WgXcQ", languages=None, fmt="doc",
             save=False, db_path=None,
@@ -301,14 +302,15 @@ class TestSavedEndpoint:
         """Returns markdown doc for a saved transcript when format=doc."""
         mock_store = MagicMock()
         mock_store.has_video.return_value = True
-        mock_store.get_transcript_doc.return_value = "**[00:00]** Hello World"
+        doc_output = "<details>\n<summary>00:00</summary>\n\nHello World\n\n</details>"
+        mock_store.get_transcript_doc.return_value = doc_output
         MockStore.return_value.__enter__ = MagicMock(return_value=mock_store)
         MockStore.return_value.__exit__ = MagicMock(return_value=False)
 
         resp = client.get("/saved/dQw4w9WgXcQ?format=doc")
 
         assert resp.status_code == 200
-        assert resp.text == "**[00:00]** Hello World"
+        assert resp.text == doc_output
         mock_store.get_transcript_doc.assert_called_once_with("dQw4w9WgXcQ")
 
     @patch("yt_transcript_extractor.api.TranscriptStore")

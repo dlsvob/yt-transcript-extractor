@@ -218,7 +218,7 @@ class TestGetDefaults:
 
         We verify this by checking the arguments passed to extract().
         """
-        mock_extract.return_value = "**[00:00]** Hello world"
+        mock_extract.return_value = "<details>\n<summary>00:00</summary>\n\nHello world\n\n</details>"
         # Return None so it falls back to stdout (we don't want to write files
         # in tests).
         mock_auto_path.return_value = None
@@ -278,7 +278,7 @@ class TestGetAutoPath:
         tmp_path,
     ) -> None:
         """When fmt=doc and save=True, the transcript is written to auto-path."""
-        mock_extract.return_value = "**[00:00]** Hello world"
+        mock_extract.return_value = "<details>\n<summary>00:00</summary>\n\nHello world\n\n</details>"
         # No need to mock parse_video_id — it's a pure function that handles
         # bare 11-char IDs correctly, and "dQw4w9WgXcQ" is a valid ID.
         auto_file = str(tmp_path / "channel" / "title.md")
@@ -292,12 +292,13 @@ class TestGetAutoPath:
         assert os.path.exists(auto_file)
         with open(auto_file) as fh:
             content = fh.read()
-        assert "**[00:00]** Hello world" in content
+        assert "<summary>00:00</summary>" in content
+        assert "Hello world" in content
         # The transcript content should NOT appear in the combined output —
         # only confirmation messages (which go to stderr) should be there.
         # CliRunner mixes stderr into output, so we check that the raw
         # transcript text isn't echoed (it was written to the file instead).
-        assert "**[00:00]**" not in result.output
+        assert "<details>" not in result.output
         # Confirmation message should appear (via stderr).
         assert "Transcript written to" in result.output
 
@@ -324,7 +325,7 @@ class TestSavedDefaults:
         """
         mock_store = MagicMock()
         mock_store.has_video.return_value = True
-        mock_store.get_transcript_doc.return_value = "**[00:00]** Hello"
+        mock_store.get_transcript_doc.return_value = "<details>\n<summary>00:00</summary>\n\nHello\n\n</details>"
         MockStore.return_value.__enter__ = MagicMock(return_value=mock_store)
         MockStore.return_value.__exit__ = MagicMock(return_value=False)
         # Return None so it falls back to stdout.
@@ -358,7 +359,7 @@ class TestSavedAutoPath:
         """When fmt=doc (default), the transcript is written to auto-path."""
         mock_store = MagicMock()
         mock_store.has_video.return_value = True
-        mock_store.get_transcript_doc.return_value = "**[00:00]** Saved content"
+        mock_store.get_transcript_doc.return_value = "<details>\n<summary>00:00</summary>\n\nSaved content\n\n</details>"
         MockStore.return_value.__enter__ = MagicMock(return_value=mock_store)
         MockStore.return_value.__exit__ = MagicMock(return_value=False)
 
@@ -373,10 +374,11 @@ class TestSavedAutoPath:
         assert os.path.exists(auto_file)
         with open(auto_file) as fh:
             content = fh.read()
-        assert "**[00:00]** Saved content" in content
+        assert "<summary>00:00</summary>" in content
+        assert "Saved content" in content
         # The transcript content should NOT appear in the combined output —
         # only confirmation messages (which go to stderr) should be there.
-        assert "**[00:00]**" not in result.output
+        assert "<details>" not in result.output
         # Confirmation message should appear (via stderr).
         assert "Transcript written to" in result.output
 

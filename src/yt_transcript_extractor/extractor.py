@@ -214,17 +214,44 @@ def _seconds_to_mmss(seconds: float) -> str:
     return f"{mins:02d}:{secs:02d}"
 
 
+def _format_details_block(timestamp: str, body: str) -> str:
+    """
+    Wrap a transcript paragraph in an HTML <details>/<summary> block.
+
+    Each time-windowed chunk of text becomes a collapsible section in
+    markdown renderers that support HTML (GitHub, Obsidian, etc.).
+    The timestamp serves as the clickable summary header.
+
+    Args:
+        timestamp: A MM:SS string (e.g. "01:32") shown in the summary bar.
+        body:      The transcript text for this time window.
+
+    Returns:
+        A string like:
+            <details>
+            <summary>01:32</summary>
+
+            transcript text here
+
+            </details>
+    """
+    return f"<details>\n<summary>{timestamp}</summary>\n\n{body}\n\n</details>"
+
+
 def format_doc(transcript) -> str:
     """
     Convert transcript segments into a readable markdown document.
 
     Segments are joined with spaces into flowing paragraphs, with a new
-    paragraph starting every ~30 seconds.  Each paragraph is prefixed with
-    a bold **[MM:SS]** timestamp marking the start of that time window.
-    Paragraphs are separated by blank lines for clean markdown rendering.
+    paragraph starting every ~30 seconds.  Each paragraph is wrapped in
+    a collapsible <details>/<summary> block, with the MM:SS timestamp
+    as the summary header.  Sections are separated by blank lines for
+    clean markdown rendering.
 
-    This format is designed to be human-readable and converts well to docx
-    via pandoc or similar tools.
+    This format is designed to be human-readable in renderers that support
+    HTML (GitHub, Obsidian, VS Code preview).  Each section can be
+    expanded/collapsed independently, making long transcripts easy to
+    navigate.
 
     The transcript argument can be either a FetchedTranscript (iterable of
     snippet objects with .text and .start attrs) or a list of dicts with
@@ -235,10 +262,10 @@ def format_doc(transcript) -> str:
         transcript: A FetchedTranscript or list of {"text", "start", ...} dicts.
 
     Returns:
-        A markdown string with timestamped paragraphs.  Returns an empty
-        string if the transcript has no segments.
+        A markdown string with collapsible timestamped sections.  Returns
+        an empty string if the transcript has no segments.
     """
-    paragraphs: list[str] = []
+    sections: list[str] = []
     current_texts: list[str] = []
     # Track which 30-second bucket the current paragraph belongs to.
     # None means we haven't started yet.
@@ -254,31 +281,31 @@ def format_doc(transcript) -> str:
             start = snippet.start
             text = snippet.text
 
-        # Decide whether this segment starts a new paragraph.  A new
-        # paragraph begins when (a) it's the very first segment, or
+        # Decide whether this segment starts a new section.  A new
+        # section begins when (a) it's the very first segment, or
         # (b) the segment's start time has crossed into the next
         # 30-second bucket.
         if paragraph_start is None:
-            # Very first segment — begin the first paragraph.
+            # Very first segment — begin the first section.
             paragraph_start = start
             current_texts.append(text)
         elif start - paragraph_start >= _DOC_PARAGRAPH_INTERVAL_SECS:
-            # Time threshold crossed — flush the current paragraph and
+            # Time threshold crossed — flush the current section and
             # start a new one.
             timestamp = _seconds_to_mmss(paragraph_start)
-            paragraphs.append(f"**[{timestamp}]** {' '.join(current_texts)}")
+            sections.append(_format_details_block(timestamp, " ".join(current_texts)))
             paragraph_start = start
             current_texts = [text]
         else:
-            # Still within the same time bucket — append to current paragraph.
+            # Still within the same time bucket — append to current section.
             current_texts.append(text)
 
-    # Flush the last paragraph (if any segments existed).
+    # Flush the last section (if any segments existed).
     if current_texts and paragraph_start is not None:
         timestamp = _seconds_to_mmss(paragraph_start)
-        paragraphs.append(f"**[{timestamp}]** {' '.join(current_texts)}")
+        sections.append(_format_details_block(timestamp, " ".join(current_texts)))
 
-    return "\n\n".join(paragraphs)
+    return "\n\n".join(sections)
 
 
 # ---------------------------------------------------------------------------

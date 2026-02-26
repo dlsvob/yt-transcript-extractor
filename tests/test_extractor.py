@@ -172,10 +172,14 @@ class TestFormatJson:
 # ---------------------------------------------------------------------------
 
 class TestFormatDoc:
-    """Tests for the markdown document formatter with timestamped paragraphs."""
+    """Tests for the markdown document formatter with collapsible timestamped sections."""
 
-    def test_groups_segments_into_paragraphs(self) -> None:
-        """Segments within the same ~30s window are joined into one paragraph."""
+    def _expected_section(self, timestamp: str, body: str) -> str:
+        """Build the expected <details> block for a single section."""
+        return f"<details>\n<summary>{timestamp}</summary>\n\n{body}\n\n</details>"
+
+    def test_groups_segments_into_sections(self) -> None:
+        """Segments within the same ~30s window are joined into one collapsible section."""
         transcript = _make_fake_transcript([
             {"text": "Hello world", "start": 0.0, "duration": 5.0},
             {"text": "how are you", "start": 5.0, "duration": 5.0},
@@ -183,11 +187,11 @@ class TestFormatDoc:
         ])
         result = format_doc(transcript)
 
-        # All three segments are within 30 seconds, so they form one paragraph.
-        assert result == "**[00:00]** Hello world how are you doing today"
+        # All three segments are within 30 seconds, so they form one section.
+        assert result == self._expected_section("00:00", "Hello world how are you doing today")
 
-    def test_new_paragraph_at_30_second_boundary(self) -> None:
-        """A new paragraph starts when a segment crosses the 30-second threshold."""
+    def test_new_section_at_30_second_boundary(self) -> None:
+        """A new section starts when a segment crosses the 30-second threshold."""
         transcript = _make_fake_transcript([
             {"text": "First part", "start": 0.0, "duration": 10.0},
             {"text": "still first", "start": 10.0, "duration": 10.0},
@@ -196,10 +200,8 @@ class TestFormatDoc:
         ])
         result = format_doc(transcript)
 
-        paragraphs = result.split("\n\n")
-        assert len(paragraphs) == 2
-        assert paragraphs[0] == "**[00:00]** First part still first"
-        assert paragraphs[1] == "**[00:31]** second part still second"
+        assert self._expected_section("00:00", "First part still first") in result
+        assert self._expected_section("00:31", "second part still second") in result
 
     def test_timestamps_format_correctly(self) -> None:
         """Timestamps beyond 60 seconds use correct MM:SS formatting."""
@@ -209,19 +211,17 @@ class TestFormatDoc:
         ])
         result = format_doc(transcript)
 
-        paragraphs = result.split("\n\n")
-        assert len(paragraphs) == 2
-        assert paragraphs[0].startswith("**[00:00]**")
+        assert "<summary>00:00</summary>" in result
         # 92 seconds = 1 minute 32 seconds
-        assert paragraphs[1].startswith("**[01:32]**")
+        assert "<summary>01:32</summary>" in result
 
     def test_single_segment(self) -> None:
-        """A transcript with one segment produces one paragraph."""
+        """A transcript with one segment produces one collapsible section."""
         transcript = _make_fake_transcript([
             {"text": "Only segment", "start": 0.0, "duration": 3.0},
         ])
         result = format_doc(transcript)
-        assert result == "**[00:00]** Only segment"
+        assert result == self._expected_section("00:00", "Only segment")
 
     def test_empty_transcript(self) -> None:
         """An empty transcript produces an empty string."""
@@ -236,10 +236,10 @@ class TestFormatDoc:
         ]
         # Pass the list directly — not wrapped in a mock.
         result = format_doc(segments)
-        assert result == "**[00:00]** Hello World"
+        assert result == self._expected_section("00:00", "Hello World")
 
-    def test_multiple_paragraph_boundaries(self) -> None:
-        """Multiple 30-second boundaries produce multiple paragraphs."""
+    def test_multiple_section_boundaries(self) -> None:
+        """Multiple 30-second boundaries produce multiple collapsible sections."""
         transcript = _make_fake_transcript([
             {"text": "first", "start": 0.0, "duration": 5.0},
             {"text": "second", "start": 35.0, "duration": 5.0},
@@ -247,11 +247,12 @@ class TestFormatDoc:
         ])
         result = format_doc(transcript)
 
-        paragraphs = result.split("\n\n")
-        assert len(paragraphs) == 3
-        assert paragraphs[0] == "**[00:00]** first"
-        assert paragraphs[1] == "**[00:35]** second"
-        assert paragraphs[2] == "**[01:10]** third"
+        assert self._expected_section("00:00", "first") in result
+        assert self._expected_section("00:35", "second") in result
+        assert self._expected_section("01:10", "third") in result
+        # Three sections should be present.
+        assert result.count("<details>") == 3
+        assert result.count("</details>") == 3
 
 
 # ---------------------------------------------------------------------------

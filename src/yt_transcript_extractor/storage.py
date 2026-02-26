@@ -463,20 +463,21 @@ class TranscriptStore:
 
     def get_transcript_doc(self, video_id: str) -> str:
         """
-        Retrieve a stored transcript as a readable markdown document.
+        Retrieve a stored transcript as an HTML document with collapsible sections.
 
-        Groups segments into ~30-second paragraphs with bold **[MM:SS]**
-        timestamp markers.  Produces the same output as format_doc() in
-        extractor.py, but reads from the local database instead of YouTube.
+        Groups segments into ~30-second paragraphs wrapped in <details>/<summary>
+        blocks.  Produces the same output as format_doc() in extractor.py, but
+        reads from the local database instead of YouTube.
 
         Delegates to extractor.format_doc() with the stored segment dicts
-        so the formatting logic stays in one place.
+        so the formatting logic stays in one place.  Looks up the video title
+        from the DB to use as the HTML document title.
 
         Args:
             video_id: The 11-character YouTube video ID.
 
         Returns:
-            A markdown string with timestamped paragraphs.
+            A complete HTML string with collapsible timestamped sections.
             Returns an empty string if the video isn't stored.
         """
         # Reuse the same format_doc() function from extractor.py.
@@ -486,7 +487,17 @@ class TranscriptStore:
         from yt_transcript_extractor.extractor import format_doc
 
         segments = self.get_transcript(video_id)
-        return format_doc(segments)
+        if not segments:
+            return ""
+
+        # Look up the video title for the HTML <title> and <h1>.
+        row = self.conn.execute(
+            "SELECT title FROM videos WHERE video_id = ?",
+            [video_id],
+        ).fetchone()
+        title = row[0] if row else "Transcript"
+
+        return format_doc(segments, title=title)
 
     def search_transcripts(self, query: str) -> list[dict]:
         """

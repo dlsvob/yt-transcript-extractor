@@ -80,7 +80,7 @@ def _auto_output_path(video_id: str, db: str) -> str | None:
 
     Looks up the video's title and channel name from the local database and
     constructs a path like:
-        ~/Documents/yt-transcripts/{sanitized_channel}/{sanitized_title}.md
+        ~/Documents/yt-transcripts/{sanitized_channel}/{sanitized_title}.html
 
     This is the "just works" path — the user runs `yt-transcript get <url>`
     and gets a nicely organized markdown file without specifying --output.
@@ -119,11 +119,11 @@ def _auto_output_path(video_id: str, db: str) -> str | None:
         # can't determine the path — fall back to stdout.
         return None
 
-    # Build the path: ~/Documents/yt-transcripts/{channel}/{title}.md
+    # Build the path: ~/Documents/yt-transcripts/{channel}/{title}.html
     sanitized_channel = _sanitize_filename(channel_name)
     sanitized_title = _sanitize_filename(title)
     base = os.path.expanduser(_AUTO_OUTPUT_BASE)
-    return os.path.join(base, sanitized_channel, f"{sanitized_title}.md")
+    return os.path.join(base, sanitized_channel, f"{sanitized_title}.html")
 
 
 # ---------------------------------------------------------------------------
@@ -189,7 +189,7 @@ def get(
 
     VIDEO can be a full YouTube URL or an 11-character video ID.
     By default, saves to the local DB and writes a markdown document to
-    ~/Documents/yt-transcripts/{channel}/{title}.md.
+    ~/Documents/yt-transcripts/{channel}/{title}.html.
     Use --no-save to skip DB persistence, or --format text/json for stdout.
     """
     # Parse the comma-separated language list into a proper list, if provided.
@@ -362,7 +362,7 @@ def saved(video_id: str, fmt: str, output: str | None, db: str) -> None:
     VIDEO_ID is the 11-character YouTube video identifier.
     This does NOT fetch from YouTube — it only reads from the local DB.
     By default, writes a markdown document to
-    ~/Documents/yt-transcripts/{channel}/{title}.md.
+    ~/Documents/yt-transcripts/{channel}/{title}.html.
     """
     try:
         with TranscriptStore(db) as store:

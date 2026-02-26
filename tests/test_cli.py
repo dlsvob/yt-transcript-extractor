@@ -155,7 +155,7 @@ class TestAutoOutputPath:
         assert result is not None
         # The path should end with the expected channel/title structure.
         assert result.endswith(os.path.join(
-            "Rick Astley", "Never Gonna Give You Up.md",
+            "Rick Astley", "Never Gonna Give You Up.html",
         ))
         # The path should start with the expanded home directory.
         assert result.startswith(os.path.expanduser("~"))
@@ -196,7 +196,7 @@ class TestAutoOutputPath:
         # Channel name's angle brackets should be replaced.
         assert "My -Channel-" in result
         # Title's colons, question marks, and slashes should be replaced.
-        assert "What- Is This- A-B Test.md" in result
+        assert "What- Is This- A-B Test.html" in result
 
 
 # ---------------------------------------------------------------------------
@@ -281,7 +281,7 @@ class TestGetAutoPath:
         mock_extract.return_value = "<details>\n<summary>00:00</summary>\n\nHello world\n\n</details>"
         # No need to mock parse_video_id — it's a pure function that handles
         # bare 11-char IDs correctly, and "dQw4w9WgXcQ" is a valid ID.
-        auto_file = str(tmp_path / "channel" / "title.md")
+        auto_file = str(tmp_path / "channel" / "title.html")
         mock_auto_path.return_value = auto_file
 
         runner = CliRunner()
@@ -363,7 +363,7 @@ class TestSavedAutoPath:
         MockStore.return_value.__enter__ = MagicMock(return_value=mock_store)
         MockStore.return_value.__exit__ = MagicMock(return_value=False)
 
-        auto_file = str(tmp_path / "channel" / "title.md")
+        auto_file = str(tmp_path / "channel" / "title.html")
         mock_auto_path.return_value = auto_file
 
         runner = CliRunner()

@@ -181,10 +181,10 @@ class TestSaveAndRetrieve:
 # ---------------------------------------------------------------------------
 
 class TestGetTranscriptDoc:
-    """Tests for get_transcript_doc() — collapsible markdown from stored segments."""
+    """Tests for get_transcript_doc() — HTML document from stored segments."""
 
     def test_save_and_get_doc(self, tmp_path) -> None:
-        """get_transcript_doc() returns markdown with collapsible timestamped sections."""
+        """get_transcript_doc() returns HTML with collapsible timestamped sections."""
         db_path = str(tmp_path / "test.duckdb")
         with TranscriptStore(db_path) as store:
             # Segments span 0.0–7.5 seconds — all within one 30-second window.
@@ -193,9 +193,12 @@ class TestGetTranscriptDoc:
 
             doc = store.get_transcript_doc("dQw4w9WgXcQ")
 
+            # Should be a full HTML document.
+            assert doc.startswith("<!DOCTYPE html>")
+            # Video title should appear in the document.
+            assert "Never Gonna Give You Up" in doc
             # All three segments fit in one section since they're within 30s.
-            assert doc.startswith("<details>")
-            assert "<summary>00:00</summary>" in doc
+            assert "\"timestamp\">00:00</span>" in doc
             assert "Never gonna give you up" in doc
             assert "Never gonna let you down" in doc
             assert "Never gonna run around and desert you" in doc
@@ -216,8 +219,8 @@ class TestGetTranscriptDoc:
 
             doc = store.get_transcript_doc("dQw4w9WgXcQ")
             assert doc.count("<details>") == 2
-            assert "<summary>00:00</summary>" in doc
-            assert "<summary>00:40</summary>" in doc
+            assert "\"timestamp\">00:00</span>" in doc
+            assert "\"timestamp\">00:40</span>" in doc
             assert "First part" in doc
             assert "Second part" in doc
 

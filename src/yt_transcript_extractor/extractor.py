@@ -216,42 +216,193 @@ def _seconds_to_mmss(seconds: float) -> str:
 
 def _format_details_block(timestamp: str, body: str) -> str:
     """
-    Wrap a transcript paragraph in an HTML <details>/<summary> block.
+    Wrap a transcript paragraph in a styled <details>/<summary> block.
 
-    Each time-windowed chunk of text becomes a collapsible section in
-    markdown renderers that support HTML (GitHub, Obsidian, etc.).
-    The timestamp serves as the clickable summary header.
+    Each time-windowed chunk of text becomes a collapsible panel that
+    looks like an Ant Design Collapse.Panel.  The summary bar shows the
+    timestamp as a pill badge followed by the first 50 characters of the
+    segment text with an ellipsis, giving a preview of the content.
 
     Args:
         timestamp: A MM:SS string (e.g. "01:32") shown in the summary bar.
         body:      The transcript text for this time window.
 
     Returns:
-        A string like:
-            <details>
-            <summary>01:32</summary>
-
-            transcript text here
-
-            </details>
+        An HTML string with <details>, <summary> (containing a .timestamp
+        span and a .preview span), and a .panel-content div for the body.
     """
-    return f"<details>\n<summary>{timestamp}</summary>\n\n{body}\n\n</details>"
+    # Show the first 75 characters as a preview in the title bar.
+    preview = body[:75] + "..." if len(body) > 75 else body
+    return (
+        f"<details>\n"
+        f"<summary><span class=\"timestamp\">{timestamp}</span> {preview}</summary>\n"
+        f"<div class=\"panel-content\">{body}</div>\n"
+        f"</details>"
+    )
 
 
-def format_doc(transcript) -> str:
+# HTML wrapper for the doc format, styled to look like Ant Design's Collapse
+# component.  Uses antd's design tokens (colors, radii, shadows, typography)
+# so the file looks polished when opened directly in a browser — no React or
+# JS required.  The {{...}} escapes are needed because this is a Python
+# format-string template (str.format fills {title} and {body}).
+_HTML_TEMPLATE = """\
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{title}</title>
+<style>
+  /* --- antd design tokens (v5) --- */
+  :root {{
+    --ant-color-bg-container: #ffffff;
+    --ant-color-bg-layout: #f5f5f5;
+    --ant-color-bg-elevated: #fafafa;
+    --ant-color-border: #d9d9d9;
+    --ant-color-text: rgba(0, 0, 0, 0.88);
+    --ant-color-text-secondary: rgba(0, 0, 0, 0.65);
+    --ant-color-text-tertiary: rgba(0, 0, 0, 0.45);
+    --ant-color-primary: #1677ff;
+    --ant-font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+                        'Helvetica Neue', Arial, 'Noto Sans', sans-serif;
+    --ant-font-size: 14px;
+    --ant-line-height: 1.5714;
+    --ant-border-radius: 8px;
+    --ant-padding-lg: 24px;
+    --ant-padding-md: 16px;
+    --ant-padding-sm: 12px;
+  }}
+
+  /* --- reset & page layout --- */
+  *, *::before, *::after {{ box-sizing: border-box; }}
+
+  body {{
+    font-family: var(--ant-font-family);
+    font-size: var(--ant-font-size);
+    line-height: var(--ant-line-height);
+    color: var(--ant-color-text);
+    background: var(--ant-color-bg-layout);
+    margin: 0;
+    padding: var(--ant-padding-lg);
+  }}
+
+  .container {{
+    max-width: 800px;
+    margin: 0 auto;
+  }}
+
+  /* --- page title — antd Typography h1 style --- */
+  h1 {{
+    font-weight: 600;
+    font-size: 38px;
+    line-height: 1.2;
+    margin: 0 0 var(--ant-padding-lg) 0;
+    color: var(--ant-color-text);
+  }}
+
+  /* --- collapse wrapper — antd Collapse container --- */
+  .collapse {{
+    background: var(--ant-color-bg-elevated);
+    border: 1px solid var(--ant-color-border);
+    border-radius: var(--ant-border-radius);
+    overflow: hidden;
+  }}
+
+  /* --- each panel — antd Collapse.Panel --- */
+  details {{
+    border-bottom: 1px solid var(--ant-color-border);
+  }}
+
+  details:last-child {{
+    border-bottom: none;
+  }}
+
+  /* --- panel header — antd Collapse.Panel header --- */
+  summary {{
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: var(--ant-padding-sm) var(--ant-padding-md);
+    cursor: pointer;
+    font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+    font-weight: 400;
+    font-size: var(--ant-font-size);
+    color: var(--ant-color-text-secondary);
+    background: var(--ant-color-bg-elevated);
+    list-style: none;
+    user-select: none;
+    transition: background 0.2s;
+  }}
+
+  summary:hover {{
+    background: var(--ant-color-bg-container);
+  }}
+
+  /* Remove the default browser disclosure triangle. */
+  summary::-webkit-details-marker {{ display: none; }}
+  summary::marker {{ display: none; content: ""; }}
+
+  /* Custom caret arrow that rotates when open — matches antd's chevron. */
+  summary::before {{
+    content: "";
+    display: inline-block;
+    width: 0;
+    height: 0;
+    border-style: solid;
+    border-width: 5px 0 5px 8px;
+    border-color: transparent transparent transparent var(--ant-color-text-tertiary);
+    flex-shrink: 0;
+    transition: transform 0.2s ease;
+  }}
+
+  details[open] > summary::before {{
+    transform: rotate(90deg);
+  }}
+
+  /* Timestamp badge — gives the MM:SS a subtle pill style. */
+  summary .timestamp {{
+    font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--ant-color-primary);
+    background: rgba(22, 119, 255, 0.06);
+    padding: 1px 8px;
+    border-radius: 4px;
+    flex-shrink: 0;
+  }}
+
+  /* --- panel body — antd Collapse.Panel content area --- */
+  .panel-content {{
+    padding: var(--ant-padding-md) var(--ant-padding-md) var(--ant-padding-md) 40px;
+    color: var(--ant-color-text-secondary);
+    line-height: 1.8;
+    background: var(--ant-color-bg-container);
+  }}
+</style>
+</head>
+<body>
+<div class="container">
+<h1>{title}</h1>
+<div class="collapse">
+{body}
+</div>
+</div>
+</body>
+</html>"""
+
+
+def format_doc(transcript, title: str = "Transcript") -> str:
     """
-    Convert transcript segments into a readable markdown document.
+    Convert transcript segments into an HTML document with collapsible sections.
 
     Segments are joined with spaces into flowing paragraphs, with a new
     paragraph starting every ~30 seconds.  Each paragraph is wrapped in
     a collapsible <details>/<summary> block, with the MM:SS timestamp
-    as the summary header.  Sections are separated by blank lines for
-    clean markdown rendering.
+    as the summary header.
 
-    This format is designed to be human-readable in renderers that support
-    HTML (GitHub, Obsidian, VS Code preview).  Each section can be
-    expanded/collapsed independently, making long transcripts easy to
-    navigate.
+    The output is a complete HTML document (with <!DOCTYPE>, <head>, and
+    minimal CSS) so it renders nicely when opened directly in a browser.
 
     The transcript argument can be either a FetchedTranscript (iterable of
     snippet objects with .text and .start attrs) or a list of dicts with
@@ -260,10 +411,12 @@ def format_doc(transcript) -> str:
 
     Args:
         transcript: A FetchedTranscript or list of {"text", "start", ...} dicts.
+        title:      Document title shown in the browser tab and as an <h1>.
+                    Defaults to "Transcript".
 
     Returns:
-        A markdown string with collapsible timestamped sections.  Returns
-        an empty string if the transcript has no segments.
+        A complete HTML string with collapsible timestamped sections.
+        Returns an empty string if the transcript has no segments.
     """
     sections: list[str] = []
     current_texts: list[str] = []
@@ -305,7 +458,13 @@ def format_doc(transcript) -> str:
         timestamp = _seconds_to_mmss(paragraph_start)
         sections.append(_format_details_block(timestamp, " ".join(current_texts)))
 
-    return "\n\n".join(sections)
+    if not sections:
+        return ""
+
+    # Wrap the collapsible sections in a full HTML document so the file
+    # renders properly when opened directly in a browser.
+    body = "\n\n".join(sections)
+    return _HTML_TEMPLATE.format(title=title, body=body)
 
 
 # ---------------------------------------------------------------------------
@@ -361,11 +520,15 @@ def extract(
     # if-block so the default (save=False) path has zero overhead from yt-dlp
     # or duckdb imports.  FetchedTranscript is safely re-iterable (backed by
     # a list internally), so saving first then formatting works correctly.
+    # We also capture the video title (if available) for the doc format's
+    # HTML <title> and <h1>.
+    doc_title = "Transcript"
     if save:
         from yt_transcript_extractor.metadata import fetch_video_metadata
         from yt_transcript_extractor.storage import TranscriptStore
 
         metadata = fetch_video_metadata(video_id)
+        doc_title = metadata.title
         store_path = db_path or "transcripts.duckdb"
         with TranscriptStore(store_path) as store:
             store.save_transcript(video_id, transcript, metadata)
@@ -374,6 +537,6 @@ def extract(
         return format_json(transcript, video_id)
 
     if fmt == "doc":
-        return format_doc(transcript)
+        return format_doc(transcript, title=doc_title)
 
     return format_text(transcript)

@@ -172,11 +172,30 @@ class TestFormatJson:
 # ---------------------------------------------------------------------------
 
 class TestFormatDoc:
-    """Tests for the markdown document formatter with collapsible timestamped sections."""
+    """Tests for the HTML document formatter with collapsible timestamped sections."""
 
-    def _expected_section(self, timestamp: str, body: str) -> str:
-        """Build the expected <details> block for a single section."""
-        return f"<details>\n<summary>{timestamp}</summary>\n\n{body}\n\n</details>"
+    def test_returns_full_html_document(self) -> None:
+        """format_doc() returns a complete HTML document with doctype and head."""
+        transcript = _make_fake_transcript([
+            {"text": "Hello world", "start": 0.0, "duration": 5.0},
+        ])
+        result = format_doc(transcript)
+
+        assert result.startswith("<!DOCTYPE html>")
+        assert "<html" in result
+        assert "</html>" in result
+        assert "<head>" in result
+        assert "<body>" in result
+
+    def test_title_in_html(self) -> None:
+        """The title parameter appears in both <title> and <h1> tags."""
+        transcript = _make_fake_transcript([
+            {"text": "Hello", "start": 0.0, "duration": 5.0},
+        ])
+        result = format_doc(transcript, title="My Video")
+
+        assert "<title>My Video</title>" in result
+        assert "<h1>My Video</h1>" in result
 
     def test_groups_segments_into_sections(self) -> None:
         """Segments within the same ~30s window are joined into one collapsible section."""
@@ -188,7 +207,9 @@ class TestFormatDoc:
         result = format_doc(transcript)
 
         # All three segments are within 30 seconds, so they form one section.
-        assert result == self._expected_section("00:00", "Hello world how are you doing today")
+        assert "\"timestamp\">00:00</span>" in result
+        assert "Hello world how are you doing today" in result
+        assert result.count("<details>") == 1
 
     def test_new_section_at_30_second_boundary(self) -> None:
         """A new section starts when a segment crosses the 30-second threshold."""
@@ -200,8 +221,11 @@ class TestFormatDoc:
         ])
         result = format_doc(transcript)
 
-        assert self._expected_section("00:00", "First part still first") in result
-        assert self._expected_section("00:31", "second part still second") in result
+        assert "\"timestamp\">00:00</span>" in result
+        assert "First part still first" in result
+        assert "\"timestamp\">00:31</span>" in result
+        assert "second part still second" in result
+        assert result.count("<details>") == 2
 
     def test_timestamps_format_correctly(self) -> None:
         """Timestamps beyond 60 seconds use correct MM:SS formatting."""
@@ -211,9 +235,9 @@ class TestFormatDoc:
         ])
         result = format_doc(transcript)
 
-        assert "<summary>00:00</summary>" in result
+        assert "\"timestamp\">00:00</span>" in result
         # 92 seconds = 1 minute 32 seconds
-        assert "<summary>01:32</summary>" in result
+        assert "\"timestamp\">01:32</span>" in result
 
     def test_single_segment(self) -> None:
         """A transcript with one segment produces one collapsible section."""
@@ -221,7 +245,9 @@ class TestFormatDoc:
             {"text": "Only segment", "start": 0.0, "duration": 3.0},
         ])
         result = format_doc(transcript)
-        assert result == self._expected_section("00:00", "Only segment")
+        assert "\"timestamp\">00:00</span>" in result
+        assert "Only segment" in result
+        assert result.count("<details>") == 1
 
     def test_empty_transcript(self) -> None:
         """An empty transcript produces an empty string."""
@@ -236,7 +262,8 @@ class TestFormatDoc:
         ]
         # Pass the list directly — not wrapped in a mock.
         result = format_doc(segments)
-        assert result == self._expected_section("00:00", "Hello World")
+        assert "\"timestamp\">00:00</span>" in result
+        assert "Hello World" in result
 
     def test_multiple_section_boundaries(self) -> None:
         """Multiple 30-second boundaries produce multiple collapsible sections."""
@@ -247,10 +274,9 @@ class TestFormatDoc:
         ])
         result = format_doc(transcript)
 
-        assert self._expected_section("00:00", "first") in result
-        assert self._expected_section("00:35", "second") in result
-        assert self._expected_section("01:10", "third") in result
-        # Three sections should be present.
+        assert "\"timestamp\">00:00</span>" in result
+        assert "\"timestamp\">00:35</span>" in result
+        assert "\"timestamp\">01:10</span>" in result
         assert result.count("<details>") == 3
         assert result.count("</details>") == 3
 

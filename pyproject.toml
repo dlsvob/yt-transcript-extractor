@@ -1,0 +1,37 @@
+[project]
+name = "yt-transcript-extractor"
+version = "0.1.0"
+description = "Extract YouTube video transcripts as plain text or structured JSON. Usable as a Python library, CLI tool, or REST API."
+readme = "README.md"
+authors = [
+    { name = "Dan Svoboda", email = "dlsvob@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "youtube-transcript-api",
+    "click",
+    "fastapi",
+    "uvicorn",
+    "duckdb>=1.0",
+    "yt-dlp",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "httpx",
+]
+
+# CLI entry point — running `yt-transcript` in the shell invokes cli.main
+[project.scripts]
+yt-transcript = "yt_transcript_extractor.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.10.3,<0.11.0"]
+build-backend = "uv_build"
+
+# Register custom pytest markers so they don't produce warnings.
+[tool.pytest.ini_options]
+markers = [
+    "integration: tests that require network access to YouTube",
+]

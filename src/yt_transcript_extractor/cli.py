@@ -61,10 +61,10 @@ def main() -> None:
 @click.option(
     "--format", "-f",
     "fmt",                           # avoid shadowing the builtin "format"
-    type=click.Choice(["text", "json"], case_sensitive=False),
+    type=click.Choice(["text", "json", "doc"], case_sensitive=False),
     default="text",
     show_default=True,
-    help="Output format: plain text or JSON with timestamps.",
+    help="Output format: plain text, JSON with timestamps, or readable markdown document.",
 )
 @click.option(
     "--lang", "-l",
@@ -227,10 +227,10 @@ def videos(channel_id: str, db: str) -> None:
 @click.option(
     "--format", "-f",
     "fmt",
-    type=click.Choice(["text", "json"], case_sensitive=False),
+    type=click.Choice(["text", "json", "doc"], case_sensitive=False),
     default="text",
     show_default=True,
-    help="Output format: plain text or JSON with timestamps.",
+    help="Output format: plain text, JSON with timestamps, or readable markdown document.",
 )
 @click.option(
     "--output", "-o",
@@ -268,6 +268,8 @@ def saved(video_id: str, fmt: str, output: str | None, db: str) -> None:
                     "segment_count": len(segments),
                     "segments": segments,
                 }
+            elif fmt == "doc":
+                result = store.get_transcript_doc(video_id)
             else:
                 result = store.get_transcript_text(video_id)
     except TranscriptError as exc:

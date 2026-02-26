@@ -6,7 +6,7 @@ This is the heart of yt-transcript-extractor.  It wraps the
 
     1. Parsing YouTube URLs / IDs  → parse_video_id()
     2. Fetching raw transcript data → get_transcript()
-    3. Formatting output            → format_text(), format_json()
+    3. Formatting output            → format_text(), format_json(), format_doc()
     4. One-call convenience         → extract()
 
 Only single-video extraction is supported (no playlists).
@@ -190,6 +190,97 @@ def format_json(transcript: FetchedTranscript, video_id: str) -> dict:
     }
 
 
+# Paragraph boundary interval for the "doc" format.  Segments are grouped
+# into flowing paragraphs; a new paragraph starts whenever the segment's
+# start time crosses the next multiple of this threshold (in seconds).
+_DOC_PARAGRAPH_INTERVAL_SECS = 30
+
+
+def _seconds_to_mmss(seconds: float) -> str:
+    """
+    Convert a float timestamp (in seconds) to a MM:SS string.
+
+    Used by format_doc() to produce human-readable time markers.
+    Values above 59:59 wrap naturally (e.g. 3661.0 → "61:01").
+
+    Args:
+        seconds: Timestamp in seconds (e.g. 92.5).
+
+    Returns:
+        A string like "01:32".
+    """
+    total = int(seconds)
+    mins, secs = divmod(total, 60)
+    return f"{mins:02d}:{secs:02d}"
+
+
+def format_doc(transcript) -> str:
+    """
+    Convert transcript segments into a readable markdown document.
+
+    Segments are joined with spaces into flowing paragraphs, with a new
+    paragraph starting every ~30 seconds.  Each paragraph is prefixed with
+    a bold **[MM:SS]** timestamp marking the start of that time window.
+    Paragraphs are separated by blank lines for clean markdown rendering.
+
+    This format is designed to be human-readable and converts well to docx
+    via pandoc or similar tools.
+
+    The transcript argument can be either a FetchedTranscript (iterable of
+    snippet objects with .text and .start attrs) or a list of dicts with
+    "text" and "start" keys — allowing reuse from both the live-fetch and
+    stored-segment code paths.
+
+    Args:
+        transcript: A FetchedTranscript or list of {"text", "start", ...} dicts.
+
+    Returns:
+        A markdown string with timestamped paragraphs.  Returns an empty
+        string if the transcript has no segments.
+    """
+    paragraphs: list[str] = []
+    current_texts: list[str] = []
+    # Track which 30-second bucket the current paragraph belongs to.
+    # None means we haven't started yet.
+    paragraph_start: float | None = None
+
+    for snippet in transcript:
+        # Support both FetchedTranscript snippet objects (.start, .text)
+        # and plain dicts from stored segments ({"start": ..., "text": ...}).
+        if isinstance(snippet, dict):
+            start = snippet["start"]
+            text = snippet["text"]
+        else:
+            start = snippet.start
+            text = snippet.text
+
+        # Decide whether this segment starts a new paragraph.  A new
+        # paragraph begins when (a) it's the very first segment, or
+        # (b) the segment's start time has crossed into the next
+        # 30-second bucket.
+        if paragraph_start is None:
+            # Very first segment — begin the first paragraph.
+            paragraph_start = start
+            current_texts.append(text)
+        elif start - paragraph_start >= _DOC_PARAGRAPH_INTERVAL_SECS:
+            # Time threshold crossed — flush the current paragraph and
+            # start a new one.
+            timestamp = _seconds_to_mmss(paragraph_start)
+            paragraphs.append(f"**[{timestamp}]** {' '.join(current_texts)}")
+            paragraph_start = start
+            current_texts = [text]
+        else:
+            # Still within the same time bucket — append to current paragraph.
+            current_texts.append(text)
+
+    # Flush the last paragraph (if any segments existed).
+    if current_texts and paragraph_start is not None:
+        timestamp = _seconds_to_mmss(paragraph_start)
+        paragraphs.append(f"**[{timestamp}]** {' '.join(current_texts)}")
+
+    return "\n\n".join(paragraphs)
+
+
 # ---------------------------------------------------------------------------
 # High-level convenience function (main public API)
 # ---------------------------------------------------------------------------
@@ -206,7 +297,7 @@ def extract(
     One-call interface: parse URL → fetch transcript → format output.
 
     This is the recommended entry point for most users.  It chains
-    parse_video_id → get_transcript → format_text / format_json.
+    parse_video_id → get_transcript → format_text / format_json / format_doc.
 
     When save=True, the transcript and video metadata are also persisted
     to a DuckDB database for offline retrieval and search.  Metadata
@@ -216,23 +307,25 @@ def extract(
         url_or_id:  A YouTube URL or raw video ID.
         languages:  Optional language priority list (e.g. ["de", "en"]).
         fmt:        Output format — "text" for plain text, "json" for a dict
-                    with timestamps.
+                    with timestamps, "doc" for a readable markdown document
+                    with timestamped paragraphs.
         save:       If True, persist the transcript to DuckDB.  Requires
                     yt-dlp and duckdb (both are installed dependencies).
         db_path:    Path to the DuckDB file.  Defaults to "transcripts.duckdb"
                     in the current working directory.  Only used when save=True.
 
     Returns:
-        A plain-text string (fmt="text") or a dict (fmt="json").
+        A plain-text string (fmt="text"), a dict (fmt="json"), or a markdown
+        string (fmt="doc").
 
     Raises:
-        ValueError:          If fmt is not "text" or "json".
+        ValueError:          If fmt is not "text", "json", or "doc".
         TranscriptError:     (or subclass) on any extraction failure.
         MetadataFetchError:  If save=True and yt-dlp can't fetch metadata.
         StorageError:        If save=True and the database operation fails.
     """
-    if fmt not in ("text", "json"):
-        raise ValueError(f"Unknown format {fmt!r}; expected 'text' or 'json'")
+    if fmt not in ("text", "json", "doc"):
+        raise ValueError(f"Unknown format {fmt!r}; expected 'text', 'json', or 'doc'")
 
     video_id = parse_video_id(url_or_id)
     transcript = get_transcript(video_id, languages=languages)
@@ -252,5 +345,8 @@ def extract(
 
     if fmt == "json":
         return format_json(transcript, video_id)
+
+    if fmt == "doc":
+        return format_doc(transcript)
 
     return format_text(transcript)

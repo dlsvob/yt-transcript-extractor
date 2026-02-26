@@ -21,6 +21,7 @@ from yt_transcript_extractor.errors import (
 )
 from yt_transcript_extractor.extractor import (
     extract,
+    format_doc,
     format_json,
     format_text,
     parse_video_id,
@@ -164,6 +165,93 @@ class TestFormatJson:
         result = format_json(transcript, "empty_vid")
         assert result["segment_count"] == 0
         assert result["segments"] == []
+
+
+# ---------------------------------------------------------------------------
+# format_doc — readable markdown document output
+# ---------------------------------------------------------------------------
+
+class TestFormatDoc:
+    """Tests for the markdown document formatter with timestamped paragraphs."""
+
+    def test_groups_segments_into_paragraphs(self) -> None:
+        """Segments within the same ~30s window are joined into one paragraph."""
+        transcript = _make_fake_transcript([
+            {"text": "Hello world", "start": 0.0, "duration": 5.0},
+            {"text": "how are you", "start": 5.0, "duration": 5.0},
+            {"text": "doing today", "start": 10.0, "duration": 5.0},
+        ])
+        result = format_doc(transcript)
+
+        # All three segments are within 30 seconds, so they form one paragraph.
+        assert result == "**[00:00]** Hello world how are you doing today"
+
+    def test_new_paragraph_at_30_second_boundary(self) -> None:
+        """A new paragraph starts when a segment crosses the 30-second threshold."""
+        transcript = _make_fake_transcript([
+            {"text": "First part", "start": 0.0, "duration": 10.0},
+            {"text": "still first", "start": 10.0, "duration": 10.0},
+            {"text": "second part", "start": 31.0, "duration": 10.0},
+            {"text": "still second", "start": 35.0, "duration": 10.0},
+        ])
+        result = format_doc(transcript)
+
+        paragraphs = result.split("\n\n")
+        assert len(paragraphs) == 2
+        assert paragraphs[0] == "**[00:00]** First part still first"
+        assert paragraphs[1] == "**[00:31]** second part still second"
+
+    def test_timestamps_format_correctly(self) -> None:
+        """Timestamps beyond 60 seconds use correct MM:SS formatting."""
+        transcript = _make_fake_transcript([
+            {"text": "intro", "start": 0.0, "duration": 5.0},
+            {"text": "later", "start": 92.0, "duration": 5.0},
+        ])
+        result = format_doc(transcript)
+
+        paragraphs = result.split("\n\n")
+        assert len(paragraphs) == 2
+        assert paragraphs[0].startswith("**[00:00]**")
+        # 92 seconds = 1 minute 32 seconds
+        assert paragraphs[1].startswith("**[01:32]**")
+
+    def test_single_segment(self) -> None:
+        """A transcript with one segment produces one paragraph."""
+        transcript = _make_fake_transcript([
+            {"text": "Only segment", "start": 0.0, "duration": 3.0},
+        ])
+        result = format_doc(transcript)
+        assert result == "**[00:00]** Only segment"
+
+    def test_empty_transcript(self) -> None:
+        """An empty transcript produces an empty string."""
+        transcript = _make_fake_transcript([])
+        assert format_doc(transcript) == ""
+
+    def test_accepts_list_of_dicts(self) -> None:
+        """format_doc() also works with plain dicts (from stored segments)."""
+        segments = [
+            {"text": "Hello", "start": 0.0, "duration": 5.0},
+            {"text": "World", "start": 5.0, "duration": 5.0},
+        ]
+        # Pass the list directly — not wrapped in a mock.
+        result = format_doc(segments)
+        assert result == "**[00:00]** Hello World"
+
+    def test_multiple_paragraph_boundaries(self) -> None:
+        """Multiple 30-second boundaries produce multiple paragraphs."""
+        transcript = _make_fake_transcript([
+            {"text": "first", "start": 0.0, "duration": 5.0},
+            {"text": "second", "start": 35.0, "duration": 5.0},
+            {"text": "third", "start": 70.0, "duration": 5.0},
+        ])
+        result = format_doc(transcript)
+
+        paragraphs = result.split("\n\n")
+        assert len(paragraphs) == 3
+        assert paragraphs[0] == "**[00:00]** first"
+        assert paragraphs[1] == "**[00:35]** second"
+        assert paragraphs[2] == "**[01:10]** third"
 
 
 # ---------------------------------------------------------------------------

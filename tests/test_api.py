@@ -81,6 +81,21 @@ class TestTranscriptEndpoint:
         )
 
     @patch("yt_transcript_extractor.api.extract")
+    def test_doc_format(self, mock_extract: MagicMock, client: TestClient) -> None:
+        """format=doc returns markdown plain text with 200."""
+        mock_extract.return_value = "**[00:00]** Hello world Second line"
+
+        resp = client.get("/transcript/dQw4w9WgXcQ?format=doc")
+
+        assert resp.status_code == 200
+        # Doc format returns a string, so it gets a PlainTextResponse.
+        assert resp.text == "**[00:00]** Hello world Second line"
+        mock_extract.assert_called_once_with(
+            "dQw4w9WgXcQ", languages=None, fmt="doc",
+            save=False, db_path=None,
+        )
+
+    @patch("yt_transcript_extractor.api.extract")
     def test_json_format(self, mock_extract: MagicMock, client: TestClient) -> None:
         """format=json returns JSON body with 200."""
         mock_extract.return_value = _SAMPLE_JSON
@@ -280,6 +295,21 @@ class TestSavedEndpoint:
         data = resp.json()
         assert data["video_id"] == "dQw4w9WgXcQ"
         assert data["segment_count"] == 1
+
+    @patch("yt_transcript_extractor.api.TranscriptStore")
+    def test_saved_doc(self, MockStore: MagicMock, client: TestClient) -> None:
+        """Returns markdown doc for a saved transcript when format=doc."""
+        mock_store = MagicMock()
+        mock_store.has_video.return_value = True
+        mock_store.get_transcript_doc.return_value = "**[00:00]** Hello World"
+        MockStore.return_value.__enter__ = MagicMock(return_value=mock_store)
+        MockStore.return_value.__exit__ = MagicMock(return_value=False)
+
+        resp = client.get("/saved/dQw4w9WgXcQ?format=doc")
+
+        assert resp.status_code == 200
+        assert resp.text == "**[00:00]** Hello World"
+        mock_store.get_transcript_doc.assert_called_once_with("dQw4w9WgXcQ")
 
     @patch("yt_transcript_extractor.api.TranscriptStore")
     def test_saved_not_found(self, MockStore: MagicMock, client: TestClient) -> None:

@@ -80,8 +80,8 @@ async def get_transcript(
     video_id: str,
     format: str = Query(
         default="text",
-        description="Output format: 'text' for plain transcript, 'json' for structured data with timestamps.",
-        pattern="^(text|json)$",
+        description="Output format: 'text' for plain transcript, 'json' for structured data with timestamps, 'doc' for readable markdown document.",
+        pattern="^(text|json|doc)$",
     ),
     lang: str = Query(
         default="",
@@ -203,8 +203,8 @@ async def get_saved_transcript(
     video_id: str,
     format: str = Query(
         default="text",
-        description="Output format: 'text' for plain transcript, 'json' for structured data with timestamps.",
-        pattern="^(text|json)$",
+        description="Output format: 'text' for plain transcript, 'json' for structured data with timestamps, 'doc' for readable markdown document.",
+        pattern="^(text|json|doc)$",
     ),
     db: str = Query(
         default=_DEFAULT_DB,
@@ -232,6 +232,10 @@ async def get_saved_transcript(
                 "segment_count": len(segments),
                 "segments": segments,
             })
+        elif format == "doc":
+            # Readable markdown document with timestamped paragraphs.
+            text = store.get_transcript_doc(video_id)
+            return PlainTextResponse(content=text)
         else:
             text = store.get_transcript_text(video_id)
             return PlainTextResponse(content=text)

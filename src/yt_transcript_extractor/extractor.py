@@ -257,7 +257,7 @@ _HTML_TEMPLATE = """\
   /* --- antd design tokens (v5) --- */
   :root {{
     --ant-color-bg-container: #ffffff;
-    --ant-color-bg-layout: #f5f5f5;
+    --ant-color-bg-layout: #f0f2f5;
     --ant-color-bg-elevated: #fafafa;
     --ant-color-border: #d9d9d9;
     --ant-color-text: rgba(0, 0, 0, 0.88);
@@ -266,7 +266,7 @@ _HTML_TEMPLATE = """\
     --ant-color-primary: #1677ff;
     --ant-font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
                         'Helvetica Neue', Arial, 'Noto Sans', sans-serif;
-    --ant-font-size: 14px;
+    --ant-font-size: 15px;
     --ant-line-height: 1.5714;
     --ant-border-radius: 8px;
     --ant-padding-lg: 24px;
@@ -277,35 +277,49 @@ _HTML_TEMPLATE = """\
   /* --- reset & page layout --- */
   *, *::before, *::after {{ box-sizing: border-box; }}
 
+  /* Warm gradient background instead of flat gray; antialiased text. */
   body {{
     font-family: var(--ant-font-family);
     font-size: var(--ant-font-size);
     line-height: var(--ant-line-height);
     color: var(--ant-color-text);
-    background: var(--ant-color-bg-layout);
+    background: linear-gradient(135deg, #f0f2f5 0%, #e8ecf1 100%);
+    min-height: 100vh;
     margin: 0;
     padding: var(--ant-padding-lg);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }}
 
+  /* White card that floats on the gradient background. */
   .container {{
     max-width: 800px;
     margin: 0 auto;
+    background: var(--ant-color-bg-container);
+    border-radius: var(--ant-border-radius);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+    padding: var(--ant-padding-lg);
   }}
 
   /* --- page title — antd Typography h1 style --- */
+  /* Slightly smaller than before (34px) with a thin accent underline. */
   h1 {{
     font-weight: 600;
-    font-size: 38px;
+    font-size: 34px;
     line-height: 1.2;
     margin: 0 0 var(--ant-padding-lg) 0;
+    padding-bottom: var(--ant-padding-sm);
+    border-bottom: 2px solid var(--ant-color-primary);
     color: var(--ant-color-text);
   }}
 
   /* --- collapse wrapper — antd Collapse container --- */
+  /* Soft shadow instead of a hard border — panels feel lighter. */
   .collapse {{
     background: var(--ant-color-bg-elevated);
-    border: 1px solid var(--ant-color-border);
+    border: none;
     border-radius: var(--ant-border-radius);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
     overflow: hidden;
   }}
 
@@ -319,65 +333,85 @@ _HTML_TEMPLATE = """\
   }}
 
   /* --- panel header — antd Collapse.Panel header --- */
+  /* Ellipsis on long previews; subtle gradient on hover; more padding. */
   summary {{
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: var(--ant-padding-sm) var(--ant-padding-md);
+    padding: 14px var(--ant-padding-md);
     cursor: pointer;
     font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
     font-weight: 400;
     font-size: var(--ant-font-size);
+    letter-spacing: -0.01em;
     color: var(--ant-color-text-secondary);
     background: var(--ant-color-bg-elevated);
     list-style: none;
     user-select: none;
-    transition: background 0.2s;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: background 0.25s ease;
   }}
 
   summary:hover {{
-    background: var(--ant-color-bg-container);
+    background: linear-gradient(90deg, var(--ant-color-bg-container) 0%, var(--ant-color-bg-elevated) 100%);
+  }}
+
+  /* Light blue tint on the expanded panel's summary bar. */
+  details[open] > summary {{
+    background: rgba(22, 119, 255, 0.04);
   }}
 
   /* Remove the default browser disclosure triangle. */
   summary::-webkit-details-marker {{ display: none; }}
   summary::marker {{ display: none; content: ""; }}
 
-  /* Custom caret arrow that rotates when open — matches antd's chevron. */
+  /* Custom caret — inline SVG chevron for crisp rendering at all sizes. */
   summary::before {{
     content: "";
     display: inline-block;
-    width: 0;
-    height: 0;
-    border-style: solid;
-    border-width: 5px 0 5px 8px;
-    border-color: transparent transparent transparent var(--ant-color-text-tertiary);
+    width: 12px;
+    height: 12px;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M6 3l5 5-5 5' fill='none' stroke='rgba(0,0,0,0.45)' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
     flex-shrink: 0;
-    transition: transform 0.2s ease;
+    transition: transform 0.25s ease;
   }}
 
   details[open] > summary::before {{
     transform: rotate(90deg);
   }}
 
-  /* Timestamp badge — gives the MM:SS a subtle pill style. */
+  /* Timestamp pill — more saturated, with a thin border and shadow. */
   summary .timestamp {{
     font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
     font-size: 12px;
-    font-weight: 400;
+    font-weight: 500;
     color: var(--ant-color-primary);
-    background: rgba(22, 119, 255, 0.06);
-    padding: 1px 8px;
+    background: rgba(22, 119, 255, 0.1);
+    border: 1px solid rgba(22, 119, 255, 0.18);
+    box-shadow: 0 1px 2px rgba(22, 119, 255, 0.06);
+    padding: 2px 8px;
     border-radius: 4px;
     flex-shrink: 0;
   }}
 
   /* --- panel body — antd Collapse.Panel content area --- */
+  /* Thin left accent border replaces the deep indent; roomier line-height. */
   .panel-content {{
-    padding: var(--ant-padding-md) var(--ant-padding-md) var(--ant-padding-md) 40px;
+    padding: var(--ant-padding-md) var(--ant-padding-md) var(--ant-padding-md) var(--ant-padding-md);
+    margin-left: var(--ant-padding-md);
+    border-left: 2px solid var(--ant-color-primary);
     color: var(--ant-color-text-secondary);
-    line-height: 1.8;
+    line-height: 1.9;
     background: var(--ant-color-bg-container);
+    animation: fadeIn 0.15s ease;
+  }}
+
+  /* Subtle fade-in when a panel opens. */
+  @keyframes fadeIn {{
+    from {{ opacity: 0; transform: translateY(-4px); }}
+    to   {{ opacity: 1; transform: translateY(0); }}
   }}
 </style>
 </head>

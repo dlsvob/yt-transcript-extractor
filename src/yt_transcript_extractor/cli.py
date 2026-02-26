@@ -22,6 +22,8 @@ Usage examples:
 from __future__ import annotations
 
 import json
+import os
+import re
 import sys
 
 import click
@@ -37,6 +39,91 @@ from yt_transcript_extractor.storage import TranscriptStore
 
 # Default database path used by all subcommands.  Can be overridden with --db.
 _DEFAULT_DB = "transcripts.duckdb"
+
+# Base directory for auto-saved transcript documents.  Expands ~ at runtime
+# so it works on any user's machine.
+_AUTO_OUTPUT_BASE = os.path.join("~", "Documents", "yt-transcripts")
+
+# Characters that are unsafe in filenames on Windows and/or POSIX systems.
+# We replace these with a hyphen when building auto-output paths.
+_UNSAFE_FILENAME_CHARS = re.compile(r'[:/\\?*<>|"]')
+
+
+# ---------------------------------------------------------------------------
+# Helper functions — filename sanitization and auto-output path generation
+# ---------------------------------------------------------------------------
+
+def _sanitize_filename(name: str) -> str:
+    """
+    Replace filesystem-unsafe characters with hyphens and clean up whitespace.
+
+    Takes a raw string (e.g. a video title or channel name) and returns a
+    version that's safe to use as a filename on both Windows and POSIX.
+    Specifically:
+      - Replaces : / \\ ? * < > | " with hyphens.
+      - Strips leading/trailing whitespace and dots (dots at the start
+        create hidden files on POSIX; dots at the end cause issues on Windows).
+
+    Args:
+        name: The raw string to sanitize (e.g. "My Video: Part 1/2").
+
+    Returns:
+        A sanitized string safe for use as a filename (e.g. "My Video- Part 1-2").
+    """
+    sanitized = _UNSAFE_FILENAME_CHARS.sub("-", name)
+    return sanitized.strip().strip(".")
+
+
+def _auto_output_path(video_id: str, db: str) -> str | None:
+    """
+    Build an automatic output file path for a video's transcript document.
+
+    Looks up the video's title and channel name from the local database and
+    constructs a path like:
+        ~/Documents/yt-transcripts/{sanitized_channel}/{sanitized_title}.md
+
+    This is the "just works" path — the user runs `yt-transcript get <url>`
+    and gets a nicely organized markdown file without specifying --output.
+
+    Args:
+        video_id: The 11-character YouTube video ID to look up.
+        db:       Path to the DuckDB database file containing video metadata.
+
+    Returns:
+        The full expanded file path as a string, or None if the video isn't
+        in the database (which means we can't determine channel/title).
+    """
+    try:
+        with TranscriptStore(db) as store:
+            if not store.has_video(video_id):
+                return None
+
+            # Query the video's title and its channel name by joining
+            # the videos and channels tables.
+            row = store.conn.execute(
+                """
+                SELECT v.title, c.channel_name
+                FROM videos v
+                JOIN channels c ON v.channel_id = c.channel_id
+                WHERE v.video_id = ?
+                """,
+                [video_id],
+            ).fetchone()
+
+            if row is None:
+                return None
+
+            title, channel_name = row[0], row[1]
+    except TranscriptError:
+        # If the DB can't be opened (e.g. first run, corrupt file), we
+        # can't determine the path — fall back to stdout.
+        return None
+
+    # Build the path: ~/Documents/yt-transcripts/{channel}/{title}.md
+    sanitized_channel = _sanitize_filename(channel_name)
+    sanitized_title = _sanitize_filename(title)
+    base = os.path.expanduser(_AUTO_OUTPUT_BASE)
+    return os.path.join(base, sanitized_channel, f"{sanitized_title}.md")
 
 
 # ---------------------------------------------------------------------------
@@ -62,7 +149,7 @@ def main() -> None:
     "--format", "-f",
     "fmt",                           # avoid shadowing the builtin "format"
     type=click.Choice(["text", "json", "doc"], case_sensitive=False),
-    default="text",
+    default="doc",
     show_default=True,
     help="Output format: plain text, JSON with timestamps, or readable markdown document.",
 )
@@ -78,9 +165,9 @@ def main() -> None:
     help="Write output to a file instead of stdout.",
 )
 @click.option(
-    "--save", "-s",
-    is_flag=True,
-    default=False,
+    "--save/--no-save",
+    default=True,
+    show_default=True,
     help="Save the transcript to a local DuckDB database for offline access.",
 )
 @click.option(
@@ -101,7 +188,9 @@ def get(
     Fetch a YouTube video transcript.
 
     VIDEO can be a full YouTube URL or an 11-character video ID.
-    Use --save to persist the transcript locally for later retrieval.
+    By default, saves to the local DB and writes a markdown document to
+    ~/Documents/yt-transcripts/{channel}/{title}.md.
+    Use --no-save to skip DB persistence, or --format text/json for stdout.
     """
     # Parse the comma-separated language list into a proper list, if provided.
     languages: list[str] | None = None
@@ -134,11 +223,33 @@ def get(
 
     # Write to file or stdout.
     if output:
+        # Explicit --output given — write to that exact path.
         with open(output, "w", encoding="utf-8") as fh:
             fh.write(text)
             fh.write("\n")
         click.echo(f"Transcript written to {output}", err=True)
+    elif fmt == "doc" and save:
+        # Auto-path mode: doc format + save is on + no explicit --output.
+        # We need the video_id to look up metadata.  extract() was called with
+        # the raw URL/ID, so we parse it again to get the canonical 11-char ID.
+        from yt_transcript_extractor.extractor import parse_video_id
+        video_id = parse_video_id(video)
+        auto_path = _auto_output_path(video_id, db)
+
+        if auto_path:
+            # Create the directory tree (e.g. ~/Documents/yt-transcripts/Channel/)
+            # if it doesn't exist yet.
+            os.makedirs(os.path.dirname(auto_path), exist_ok=True)
+            with open(auto_path, "w", encoding="utf-8") as fh:
+                fh.write(text)
+                fh.write("\n")
+            click.echo(f"Transcript written to {auto_path}", err=True)
+        else:
+            # Fallback: couldn't determine path (shouldn't happen since save
+            # succeeded, but be safe) — print to stdout.
+            click.echo(text)
     else:
+        # Non-doc format or save is off — print to stdout as before.
         click.echo(text)
 
 
@@ -228,7 +339,7 @@ def videos(channel_id: str, db: str) -> None:
     "--format", "-f",
     "fmt",
     type=click.Choice(["text", "json", "doc"], case_sensitive=False),
-    default="text",
+    default="doc",
     show_default=True,
     help="Output format: plain text, JSON with timestamps, or readable markdown document.",
 )
@@ -250,13 +361,15 @@ def saved(video_id: str, fmt: str, output: str | None, db: str) -> None:
 
     VIDEO_ID is the 11-character YouTube video identifier.
     This does NOT fetch from YouTube — it only reads from the local DB.
+    By default, writes a markdown document to
+    ~/Documents/yt-transcripts/{channel}/{title}.md.
     """
     try:
         with TranscriptStore(db) as store:
             if not store.has_video(video_id):
                 click.echo(
                     f"Error: Video {video_id} not found in database. "
-                    f"Use 'yt-transcript get --save {video_id}' to save it first.",
+                    f"Use 'yt-transcript get {video_id}' to save it first.",
                     err=True,
                 )
                 sys.exit(1)
@@ -284,11 +397,27 @@ def saved(video_id: str, fmt: str, output: str | None, db: str) -> None:
 
     # Write to file or stdout.
     if output:
+        # Explicit --output given — write to that exact path.
         with open(output, "w", encoding="utf-8") as fh:
             fh.write(text)
             fh.write("\n")
         click.echo(f"Transcript written to {output}", err=True)
+    elif fmt == "doc":
+        # Auto-path mode: doc format + no explicit --output.
+        # Build the path from DB metadata and write the file there.
+        auto_path = _auto_output_path(video_id, db)
+
+        if auto_path:
+            os.makedirs(os.path.dirname(auto_path), exist_ok=True)
+            with open(auto_path, "w", encoding="utf-8") as fh:
+                fh.write(text)
+                fh.write("\n")
+            click.echo(f"Transcript written to {auto_path}", err=True)
+        else:
+            # Fallback: couldn't determine path — print to stdout.
+            click.echo(text)
     else:
+        # Non-doc format — print to stdout as before.
         click.echo(text)
 
 
